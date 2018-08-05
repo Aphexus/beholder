@@ -97,6 +97,45 @@ Vertex[][] data = [
 	]
 ];
 
+struct Foo
+{
+	int i;
+	float f;
+	string str;
+}
+
+struct AggregateState
+{
+	import nuklear_sdl_gl3;
+
+	Foo* value;
+	nk_collapse_states state;
+	int[3] selected;
+}
+
+auto drawAggregate(T, Context)(Context ctx, ref T t)
+{
+	import nuklear_sdl_gl3;
+
+	import std.format : sformat;
+	char[512] buffer;
+
+	enum Header = typeof(*T.value).stringof;
+	if (nk_tree_state_push(ctx, NK_TREE_NODE, Header.ptr, &t.state))
+	{
+		sformat(buffer, "%d\0", t.value.i);
+		nk_selectable_label(ctx, buffer.ptr, NK_TEXT_LEFT, &t.selected[0]);
+		sformat(buffer, "%f\0", t.value.f);
+		nk_selectable_label(ctx, buffer.ptr, NK_TEXT_LEFT, &t.selected[1]);
+		if (t.value.str.length)
+			sformat(buffer, "%s\0", t.value.str);
+		else
+			buffer = " \0";
+		nk_selectable_label(ctx, buffer.ptr, NK_TEXT_LEFT, &t.selected[2]);
+		nk_tree_pop(ctx);
+	}
+}
+
 class NuklearApplication : Application
 {
 	import nuklear_sdl_gl3;
@@ -105,6 +144,8 @@ class NuklearApplication : Application
 	enum MAX_ELEMENT_MEMORY = 128 * 1024;
 
 	nk_context* ctx;
+	Foo foo;
+	AggregateState foo_state;
 
 	this(string title, int w, int h, Application.FullScreen flag)
 	{
@@ -114,6 +155,8 @@ class NuklearApplication : Application
 		nk_font_atlas *atlas;
 		nk_sdl_font_stash_begin(&atlas);
 		nk_sdl_font_stash_end();
+
+		foo_state = AggregateState(&foo);
 	}
 
 	~this()
@@ -128,7 +171,7 @@ class NuklearApplication : Application
 		static nk_colorf bg;
 		bg.r = 0.10f, bg.g = 0.18f, bg.b = 0.24f, bg.a = 1.0f;
 
-		if (nk_begin(ctx, "Demo", nk_rect(50, 50, 230, 250),
+		if (nk_begin(ctx, "Demo", nk_rect(50, 50, 230, 450),
 			NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
 			NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))
 		{
@@ -159,6 +202,7 @@ class NuklearApplication : Application
 				nk_combo_end(ctx);
 			}
 		}
+		drawAggregate(ctx, foo_state);
 		nk_end(ctx);
 
 		nk_sdl_render(NK_ANTI_ALIASING_ON, MAX_VERTEX_MEMORY, MAX_ELEMENT_MEMORY);
