@@ -104,6 +104,48 @@ struct Foo
 	string str;
 }
 
+import std.traits : isAggregateType;
+
+auto countKind(T)()
+{
+	import std.typecons : tuple;
+	import std.traits : isAggregateType, isArray, isSomeString;
+
+	size_t aggregates, pods, arrays;
+	static foreach(i; 0..T.tupleof.length)
+	{
+		{
+			alias F = typeof(T.tupleof[i]);
+			static if (isAggregateType!F)
+				aggregates++;
+			else static if (isSomeString!F)
+				pods++;
+			else static if (isArray!F)
+				arrays++;
+			else
+				pods++;
+		}
+	}
+	return tuple!("aggregates", "pods", "arrays")(aggregates, pods, arrays);
+}
+
+pragma(msg, countKind!Foo());
+
+struct CodeGen(T) if (is(T == struct))
+{
+	import nuklear_sdl_gl3;
+
+	enum kindCount = countKind!T;
+	T* value;
+	int[kindCount.pods] selected;
+	nk_collapse_states[kindCount.aggregates] aggregate_state;
+	nk_collapse_states[kindCount.arrays] array_state;
+	// static foreach(i; 0..T.tupleof.length)
+	// {
+
+	// }
+}
+
 struct AggregateState
 {
 	import nuklear_sdl_gl3;
@@ -111,6 +153,8 @@ struct AggregateState
 	Foo* value;
 	nk_collapse_states state;
 	int[3] selected;
+
+	CodeGen!Foo test;
 }
 
 auto drawAggregate(T, Context)(Context ctx, ref T t)
@@ -120,18 +164,33 @@ auto drawAggregate(T, Context)(Context ctx, ref T t)
 	import std.format : sformat;
 	char[512] buffer;
 
-	enum Header = typeof(*T.value).stringof;
+	alias Type = typeof(*T.value);
+	enum Header = Type.stringof;
 	if (nk_tree_state_push(ctx, NK_TREE_NODE, Header.ptr, &t.state))
 	{
-		sformat(buffer, "%d\0", t.value.i);
-		nk_selectable_label(ctx, buffer.ptr, NK_TEXT_LEFT, &t.selected[0]);
-		sformat(buffer, "%f\0", t.value.f);
-		nk_selectable_label(ctx, buffer.ptr, NK_TEXT_LEFT, &t.selected[1]);
-		if (t.value.str.length)
-			sformat(buffer, "%s\0", t.value.str);
-		else
-			buffer = " \0";
-		nk_selectable_label(ctx, buffer.ptr, NK_TEXT_LEFT, &t.selected[2]);
+		size_t nested_i;
+		static foreach(i; 0..Type.tupleof.length)
+		{
+			{
+				alias T = typeof(t.value.tupleof[i]);
+				static if (is(T == struct))
+					drawAggregate(ctx, t.nested[nested_i++]);
+				else static if (is(T == string))
+					buffer = " \0";
+				else
+					sformat(buffer, "%s\0", t.value.tupleof[i]);
+				nk_selectable_label(ctx, buffer.ptr, NK_TEXT_LEFT, &t.selected[i]);
+			}
+		}
+		// sformat(buffer, "%d\0", t.value.i);
+		// nk_selectable_label(ctx, buffer.ptr, NK_TEXT_LEFT, &t.selected[0]);
+		// sformat(buffer, "%f\0", t.value.f);
+		// nk_selectable_label(ctx, buffer.ptr, NK_TEXT_LEFT, &t.selected[1]);
+		// if (t.value.str.length)
+		// 	sformat(buffer, "%s\0", t.value.str);
+		// else
+		// 	buffer = " \0";
+		// nk_selectable_label(ctx, buffer.ptr, NK_TEXT_LEFT, &t.selected[2]);
 		nk_tree_pop(ctx);
 	}
 }
